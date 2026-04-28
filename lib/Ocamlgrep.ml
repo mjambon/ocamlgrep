@@ -1,11 +1,24 @@
 (* This file is part of the ocamlgrep package *)
 (* See the attached LICENSE file.            *)
-(* Copyright (C) 2000-2024 LexiFi            *)
+(* Copyright (C) 2000-2026 LexiFi            *)
 
+open Printf
 open Asttypes
 open Parsetree
 open Typedtree
 open Longident
+
+type finding = {
+  source: string;
+  i: int;
+  c1: int;
+  c2: int;
+  s: string;
+}
+
+type event =
+  | Finding of finding
+  | Warning of string
 
 let initial_cwd = Sys.getcwd ()
 
@@ -37,31 +50,6 @@ let build_root, build_prefix =
       loop (Filename.concat (Filename.basename dir) prefix) dir'
   in
   loop "" initial_cwd
-
-let in_build_dir path =
-  Filename.concat build_root (Filename.concat "_build" (Filename.concat "default" path))
-
-type color =
-  | Yellow
-  | Red
-  | Green
-
-let color c fmt =
-  Printf.sprintf ("\027[1;%dm" ^^ fmt ^^ "\027[0m") (match c with Yellow -> 33 | Red -> 31 | Green -> 32)
-
-let print_results_with_color_range i c1 c2 s file_color =
-  let i_color = color Yellow "%d" i in
-  let s_color =
-    let len = String.length s in
-    if c2 > len || c1 > len then
-      Printf.sprintf
-        " Skipping this line with wrong indexes -- Maybe you should think about recompiling this file."
-    else
-      String.sub s 0 c1 ^
-      color Red "%s" (String.sub s c1 (c2-c1)) ^
-      String.sub s c2 (String.length s - c2)
-  in
-  Printf.printf "%s:%s:%s\n%!" file_color i_color s_color
 
 (*** Structured search ***)
 
@@ -393,9 +381,18 @@ and match_case : type k. k case -> _ -> _ = fun {c_lhs; c_guard; c_rhs} {pc_lhs;
   match_opt match_expr c_guard pc_guard;
   match_expr c_rhs pc_rhs
 
-let ocamlgrep search =
+let in_build_dir path =
+  Filename.concat build_root (Filename.concat "_build" (Filename.concat "default" path))
+
+(* TODO: restore original behavior: offer a way to print findings as they come?
+   TODO: apply a similar treatment to errors and warnings
+*)
+let incremental_search
+    ?(root = in_build_dir build_prefix)
+    (handle_event : event -> unit)
+    query : unit =
   let expr =
-    match Parse.implementation (Lexing.from_string search) with
+    match Parse.implementation (Lexing.from_string query) with
     | [{Parsetree.pstr_desc = Pstr_eval (x, _); _}] -> x
     | _ -> failwith "Can only grep for an expression."
     | exception _ -> failwith "Could not parse search expression."
@@ -447,15 +444,17 @@ let ocamlgrep search =
               in
               if not (Sys.file_exists pp_source) then ()
               else if digest <> Digest.file pp_source then
-                Printf.eprintf "** Warning: %s does not correspond to %s (ignoring)\n%!"
-                  entry pp_source
+                handle_event (Warning (sprintf "** Warning: %s does not correspond to %s (ignoring)"
+                  entry pp_source))
               else begin
-                let file_color = color Green "%s" source in
                 match search_cmt cmt with
                 | exception Cannot_parse_type exn ->
                     failwith (Format.asprintf "%s: could not parse type: %a." entry Location.report_exception exn)
                 | exception exn ->
-                    Format.eprintf "%s: error while analysing %s: %a@." (color Yellow "Warning") entry Location.report_exception exn
+                    handle_event (Warning (
+                      Format.asprintf "error while analysing %s: %a"
+                        entry Location.report_exception exn
+                    ))
                 | [] -> ()
                 | _ :: _ as locs ->
                     let src_lines = Array.of_list (read_lines source) in
@@ -470,7 +469,7 @@ let ocamlgrep search =
                            else
                              String.length s
                          in
-                         print_results_with_color_range i c1 c2 s file_color
+                         handle_event (Finding { source; i; c1; c2; s })
                       ) locs
               end
           | {cmt_sourcefile = None; _} | {cmt_source_digest = None; _} ->
@@ -480,11 +479,16 @@ let ocamlgrep search =
         end
       ) (Sys.readdir dir)
   in
-  walk (in_build_dir build_prefix)
+  walk root
 
-(*** Command-line parsing ***)
+let search ?root query =
+  let events = ref [] in
+  let handle_event ev =
+    events := ev :: !events in
+  incremental_search ?root handle_event query;
+  List.rev !events
 
-let collect_cmi_dirs () =
+let collect_cmi_dirs ?(root = in_build_dir build_prefix) () =
   let res = ref [] in
   let rec walk dir =
     Array.iter (fun entry ->
@@ -496,23 +500,5 @@ let collect_cmi_dirs () =
         end
       ) (Sys.readdir dir)
   in
-  walk (in_build_dir build_prefix);
+  walk root;
   List.rev !res
-
-let main () =
-  let search = ref None in
-  let usage_msg = "Usage: ocamlgrep <string>" in
-  Arg.parse [] (fun s -> search := Some s) usage_msg;
-  let extra_includes = collect_cmi_dirs () in
-  Load_path.init ~auto_include:Load_path.no_auto_include ~visible:(List.append extra_includes [Config.standard_library]) ~hidden:[];
-  match !search with
-  | None -> Arg.usage [] usage_msg; exit 0
-  | Some s -> ocamlgrep s
-
-let () =
-  try
-    main ()
-  with exn ->
-    let s = match exn with Failure s | Sys_error s -> s | exn -> Printexc.to_string exn in
-    Printf.eprintf "%s: %s\n%!" (color Red "Error") s;
-    exit 1
