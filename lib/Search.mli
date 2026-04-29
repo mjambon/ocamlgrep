@@ -5,6 +5,10 @@
    Ocamlgrep library - type-aware search for OCaml code patterns
 *)
 
+(** Matching snippet of code. This will change.
+    It currently only shows the first line of the match.
+    TODO: include multiline match info
+*)
 type finding = {
   source: string;
   i: int;

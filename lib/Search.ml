@@ -10,10 +10,10 @@ open Longident
 
 type finding = {
   source: string;
-  i: int;
-  c1: int;
-  c2: int;
-  s: string;
+  i: int; (* 1-based line number of start of the matching snippet *)
+  c1: int; (* 0-based index of the start of the match on the first line *)
+  c2: int; (* 0-based index of the end of the match on the first line *)
+  s: string; (* full first line of the region containing the match *)
 }
 
 type event =
