@@ -20,8 +20,6 @@ type event =
   | Finding of finding
   | Warning of string
 
-let initial_cwd = Sys.getcwd ()
-
 let drop_prefix ~prefix s =
   if String.starts_with ~prefix s then
     String.sub s (String.length prefix) (String.length s - String.length prefix)
@@ -35,21 +33,6 @@ let memoize h f k =
   match Hashtbl.find_opt h k with
   | None -> let r = f k in Hashtbl.add h k r; r
   | Some r -> r
-
-let build_root, build_prefix =
-  let rec loop prefix dir =
-    if Sys.file_exists (Filename.concat dir "_build") then
-      let absdir =
-        Fun.protect ~finally:(fun () -> Sys.chdir initial_cwd)
-          (fun () -> Sys.chdir dir; Sys.getcwd ())
-      in
-      absdir, prefix
-    else
-      let dir' = Filename.dirname dir in
-      if dir' = dir then failwith "Could not detect _build";
-      loop (Filename.concat (Filename.basename dir) prefix) dir'
-  in
-  loop "" initial_cwd
 
 (*** Structured search ***)
 
@@ -381,14 +364,8 @@ and match_case : type k. k case -> _ -> _ = fun {c_lhs; c_guard; c_rhs} {pc_lhs;
   match_opt match_expr c_guard pc_guard;
   match_expr c_rhs pc_rhs
 
-let in_build_dir path =
-  Filename.concat build_root (Filename.concat "_build" (Filename.concat "default" path))
-
-(* TODO: restore original behavior: offer a way to print findings as they come?
-   TODO: apply a similar treatment to errors and warnings
-*)
 let incremental_search
-    ?(root = in_build_dir build_prefix)
+    (paths : Paths.t)
     (handle_event : event -> unit)
     query : unit =
   let expr =
@@ -437,9 +414,13 @@ let incremental_search
           | {Cmt_format.cmt_sourcefile = Some source; cmt_source_digest = Some digest; _} as cmt ->
               let source, pp_source =
                 if Filename.check_suffix source ".pp.ml" then
-                  Filename.chop_suffix source ".pp.ml" ^ ".ml", in_build_dir source
+                  Filename.chop_suffix source ".pp.ml" ^ ".ml",
+                  Paths.in_build_dir paths source
                 else
-                  let source = drop_prefix ~prefix:build_prefix source in
+                  let source =
+                    drop_prefix
+                      ~prefix:(Paths.project_relative_search_root paths)
+                      source in
                   source, source
               in
               if not (Sys.file_exists pp_source) then ()
@@ -479,26 +460,14 @@ let incremental_search
         end
       ) (Sys.readdir dir)
   in
-  walk root
+  let search_root_in_build_dir =
+    Paths.in_build_dir paths (Paths.project_relative_search_root paths)
+  in
+  walk search_root_in_build_dir
 
-let search ?root query =
+let search paths query =
   let events = ref [] in
   let handle_event ev =
     events := ev :: !events in
-  incremental_search ?root handle_event query;
+  incremental_search paths handle_event query;
   List.rev !events
-
-let collect_cmi_dirs ?(root = in_build_dir build_prefix) () =
-  let res = ref [] in
-  let rec walk dir =
-    Array.iter (fun entry ->
-        let entry = Filename.concat dir entry in
-        if Sys.is_directory entry then begin
-          if Filename.basename entry = "byte" && Array.exists (fun name -> Filename.check_suffix name ".cmi") (Sys.readdir entry) then
-            res := entry :: !res;
-          walk entry
-        end
-      ) (Sys.readdir dir)
-  in
-  walk root;
-  List.rev !res

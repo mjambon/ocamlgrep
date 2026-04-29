@@ -3,5 +3,6 @@
  (public_name ocamlgrep)
  (libraries
    compiler-libs.common
+   unix
  )
 )
