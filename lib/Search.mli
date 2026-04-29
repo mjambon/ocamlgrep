@@ -14,9 +14,15 @@ type finding = {
 }
 
 type event =
+  | Scan_file of string
   | Finding of finding
   | Warning of string
 
+(** [incremental_search paths handler] scans the project starting
+    from the search root embedded in [paths]. Each time a finding or a
+    warning is created, the [handler] function is called. *)
 val incremental_search : Paths.t -> (event -> unit) -> string -> unit
 
+(** Wrapper around [incremental_search] that returns the results as a list
+    at the end instead of incrementally. *)
 val search : Paths.t -> string -> event list

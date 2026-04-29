@@ -17,6 +17,7 @@ type finding = {
 }
 
 type event =
+  | Scan_file of string
   | Finding of finding
   | Warning of string
 
@@ -423,6 +424,7 @@ let incremental_search
                       source in
                   source, source
               in
+              handle_event (Scan_file source);
               if not (Sys.file_exists pp_source) then ()
               else if digest <> Digest.file pp_source then
                 handle_event (Warning (sprintf "** Warning: %s does not correspond to %s (ignoring)"

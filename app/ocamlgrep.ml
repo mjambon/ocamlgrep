@@ -37,6 +37,7 @@ let print_finding_with_color_range (finding : Ocamlgrep.Search.finding) =
 
 let handle_event (ev: Ocamlgrep.Search.event) =
   match ev with
+  | Scan_file _path -> ()
   | Warning msg -> warn msg
   | Finding finding -> print_finding_with_color_range finding
 
