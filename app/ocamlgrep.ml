@@ -20,7 +20,7 @@ let color c fmt =
 let warn msg =
   eprintf "%s: %s\n%!" (color Yellow "Warning") msg
 
-let print_finding_with_color_range (finding : Ocamlgrep.Search.finding) =
+let print_finding_with_color_range (finding : Ocamlgrep.Scan.finding) =
   let file_color = color Green "%s" finding.source in
   let i_color = color Yellow "%d" finding.i in
   let s_color =
@@ -35,7 +35,7 @@ let print_finding_with_color_range (finding : Ocamlgrep.Search.finding) =
   in
   printf "%s:%s:%s\n%!" file_color i_color s_color
 
-let handle_event (ev: Ocamlgrep.Search.event) =
+let handle_event (ev: Ocamlgrep.Scan.event) =
   match ev with
   | Scan_file _path -> ()
   | Warning msg -> warn msg
@@ -53,7 +53,7 @@ let main () =
   Ocamlgrep.Paths.init paths;
   match !query with
   | None -> Arg.usage [] usage_msg; exit 0
-  | Some s -> Ocamlgrep.Search.incremental_search paths handle_event s
+  | Some s -> Ocamlgrep.Scan.incremental_search paths handle_event s
 
 let () =
   try
