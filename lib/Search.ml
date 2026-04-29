@@ -21,6 +21,8 @@ type event =
   | Finding of finding
   | Warning of string
 
+(* This is used to make a path relative to another.
+   Similar to Fpath.relativize. *)
 let drop_prefix ~prefix s =
   if String.starts_with ~prefix s then
     String.sub s (String.length prefix) (String.length s - String.length prefix)
@@ -413,6 +415,8 @@ let incremental_search
         else if Filename.check_suffix entry ".cmt" then begin
           match Cmt_format.read_cmt entry with
           | {Cmt_format.cmt_sourcefile = Some source; cmt_source_digest = Some digest; _} as cmt ->
+              (* source = user-friendly relative path to the source file
+                 pp_source = any valid path to the preprocessed ml file *)
               let source, pp_source =
                 if Filename.check_suffix source ".pp.ml" then
                   Filename.chop_suffix source ".pp.ml" ^ ".ml",
@@ -427,8 +431,10 @@ let incremental_search
               handle_event (Scan_file source);
               if not (Sys.file_exists pp_source) then ()
               else if digest <> Digest.file pp_source then
-                handle_event (Warning (sprintf "** Warning: %s does not correspond to %s (ignoring)"
-                  entry pp_source))
+                handle_event (Warning (
+                  sprintf "%s does not correspond to %s (ignoring)"
+                    entry pp_source
+                ))
               else begin
                 match search_cmt cmt with
                 | exception Cannot_parse_type exn ->
@@ -458,7 +464,7 @@ let incremental_search
           | {cmt_sourcefile = None; _} | {cmt_source_digest = None; _} ->
               ()
           | exception Cmt_format.Error (Cmt_format.Not_a_typedtree _) ->
-              failwith "error reading cmt file"
+              failwith ("error reading cmt file: " ^ entry)
         end
       ) (Sys.readdir dir)
   in

@@ -18,9 +18,10 @@ type finding = {
 }
 
 type event =
-  | Scan_file of string
-  | Finding of finding
-  | Warning of string
+  | Scan_file of string (** emitted when a new source file is about to be
+                            scanned *)
+  | Finding of finding (** found a matching region of code *)
+  | Warning of string (** a warning message, possibly containing line breaks *)
 
 (** [incremental_search paths handler] scans the project starting
     from the search root embedded in [paths]. Each time a finding or a
