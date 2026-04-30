@@ -48,7 +48,8 @@ let incremental_search
         else if Filename.check_suffix entry ".cmt" then begin
           match Cmt_format.read_cmt entry with
           | {Cmt_format.cmt_sourcefile = Some source; cmt_source_digest = Some digest; _} as cmt ->
-              (* source = user-friendly relative path to the source file
+              (* source = user-friendly path to the source file, relative to
+                          the search root (typically cwd)
                  pp_source = any valid path to the preprocessed ml file *)
               let source, pp_source =
                 if Filename.check_suffix source ".pp.ml" then
