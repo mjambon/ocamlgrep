@@ -12,7 +12,7 @@ open Longident
 
 exception Cannot_parse_type of exn
 
-(* local exception *)
+(* private exception used to fail a match *)
 exception DontMatch
 
 let initial_env = lazy (Compmisc.initial_env ())
@@ -27,9 +27,12 @@ let memoize h f k =
   | None -> let r = f k in Hashtbl.add h k r; r
   | Some r -> r
 
+(* warning: global, ever-growing cache *)
 let parse_type = memoize (Hashtbl.create 10) parse_type
 
-let wildcards = ref []
+(* This global is cleared before each search.
+   Consider passing it around explicitly as part of an 'env' argument. *)
+let wildcards = ref ([] : (Asttypes.label * Parsetree.expression) list)
 
 (* wildcards are in the form __123 ie.
    the two first characters are underscores;
@@ -112,7 +115,7 @@ let tconstant_equal_pconst tconst pconst =
   | Error _ -> false
   | Ok pconst -> Parmatch.const_compare tconst pconst = 0
 
-let rec match_expr texpr pexpr =
+let rec match_expr texpr (pexpr : Parsetree.expression) =
   if texpr.exp_loc.loc_ghost && not pexpr.pexp_loc.loc_ghost
   then raise DontMatch;
 
@@ -344,7 +347,7 @@ and match_case : type k. k case -> _ -> _ = fun {c_lhs; c_guard; c_rhs} {pc_lhs;
   match_opt match_expr c_guard pc_guard;
   match_expr c_rhs pc_rhs
 
-let search_cmt query_expr cmt =
+let search_cmt cmt query_expr =
   let open Cmt_format in
   let res = ref [] in
   let cmt_search =

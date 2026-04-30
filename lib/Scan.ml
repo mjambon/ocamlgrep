@@ -3,7 +3,6 @@
 (* Copyright (C) 2000-2026 LexiFi            *)
 
 open Printf
-open Parsetree
 
 type finding = {
   source: string;
@@ -70,7 +69,7 @@ let incremental_search
                     entry pp_source
                 ))
               else begin
-                match Match.search_cmt expr cmt with
+                match Match.search_cmt cmt expr with
                 | exception Match.Cannot_parse_type exn ->
                     failwith (
                       Format.asprintf "%s: could not parse type: %a."

@@ -7,11 +7,14 @@
 
 exception Cannot_parse_type of exn
 
-(** [search_cmt query cmt_data] scans the [query] expression against
+(** [search_cmt cmt_data query] scans the [query] expression against
     the parsed contents of a cmt file [cmt_data] and returns a list
     of matching locations.
+
+    The query is a parsed expression without inferred type information.
+    The program is a typed tree.
+
     Exceptions will be raised, including [Cannot_parse_type].
 *)
 val search_cmt :
-  Parsetree.expression ->
-  Cmt_format.cmt_infos -> Warnings.loc list
+  Cmt_format.cmt_infos -> Parsetree.expression -> Warnings.loc list
