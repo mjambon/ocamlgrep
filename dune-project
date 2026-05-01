@@ -1,3 +1,34 @@
-(lang dune 3.13)
+(lang dune 3.18)
+(name ocamlgrep)
 
-(package (name ocamlgrep))
+(generate_opam_files true)
+
+(license "MIT")
+(source (github LexiFi/ocamlgrep))
+(homepage "https://github.com/LexiFi/ocamlgrep")
+(maintainers "Martin Jambon <martin@mjambon.com>")
+(authors
+  "Nicolás Ojeda Bär"
+  "Martin Jambon"
+)
+
+(package
+ (name ocamlgrep-lib)
+ (synopsis "OCaml structural grep library")
+ (depends
+  (ocaml (>= 5.0))
+  (dune (>= 3.13))
+ )
+ (maintenance_intent "(latest)")
+)
+
+(package
+ (name ocamlgrep)
+ (synopsis "OCaml structural grep tool")
+ (depends
+  (ocaml (>= 5.0))
+  (dune (>= 3.13))
+  ocamlgrep-lib
+ )
+ (maintenance_intent "(latest)")
+)
