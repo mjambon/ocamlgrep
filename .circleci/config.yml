@@ -1,0 +1,52 @@
+#
+# CircleCI configuration. Runs each time we push a new commit to GitHub.
+#
+version: 2.1
+
+commands:
+  build:
+    parameters:
+      ocaml_version:
+        type: string
+    steps:
+      - checkout
+      - run:
+          name: Set weekly cache key segment
+          command: |
+            echo $(( $(date +%s) / 604800 )) > week_id.txt
+            echo $(( $(date +%s) / 604800 - 1 )) > previous_week_id.txt
+      - restore_cache:
+          keys:
+            - opam-ubuntu-<< parameters.ocaml_version >>-v1-{{ checksum "week_id.txt" }}
+            - opam-ubuntu-<< parameters.ocaml_version >>-v1-{{ checksum "previous_week_id.txt" }}
+      - run:
+          name: Install system dependencies
+          command: ./.circleci/setup-system
+      - run:
+          name: Install opam dependencies
+          command: ./.circleci/setup-opam
+      - save_cache:
+          key: opam-ubuntu-<< parameters.ocaml_version >>-v1-{{ checksum "week_id.txt" }}
+          paths:
+            - ~/.opam
+      - run:
+          name: Build
+          command: opam exec -- dune build
+      - run:
+          name: Test
+          command: opam exec -- dune runtest
+
+jobs:
+  build_541:
+    docker:
+      - image: ocaml/opam:ubuntu-24.04-ocaml-5.4
+    working_directory: ~/ocamlgrep
+    steps:
+      - build:
+          ocaml_version: "5.4"
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build_541
