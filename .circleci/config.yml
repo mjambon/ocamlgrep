@@ -1,6 +1,13 @@
 #
 # CircleCI configuration. Runs each time we push a new commit to GitHub.
 #
+# This builds the project and runs tests on Linux and Windows
+# for one specific minor version of OCaml (X.Y).
+# Each minor OCaml version is supported in its own Git branch
+# due to incompatibilities of compiler-libs from one version of OCaml
+# to another. For example, the name of the branch for ocaml 5.2.1 is
+# '502'.
+#
 version: 2.1
 
 orbs:
@@ -40,7 +47,7 @@ commands:
           command: opam exec -- dune runtest
 
 jobs:
-  build_541:
+  linux_build:
     docker:
       - image: ocaml/opam:ubuntu-24.04-ocaml-5.4
     working_directory: ~/ocamlgrep
@@ -122,5 +129,5 @@ workflows:
   version: 2
   build:
     jobs:
-      - build_541
+      - linux_build
       - windows_build
