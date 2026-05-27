@@ -150,7 +150,12 @@ let make_search_fn expr = Match.search expr
     Returns [Ok (findings, warnings)] on success, or
     [Error message] when a user-facing error prevents the search
     (bad query syntax, project not found, dune not available, etc.). *)
-let search ~root ~query =
+(** Extract the project-relative source filename from a finding.
+    Defined here so that [Location] unambiguously refers to the compiler's
+    [Location] module rather than any LSP [Location] in the caller's scope. *)
+let finding_filename (f : finding) = f.loc.loc_start.pos_fname
+
+
   let ( let/ ) x f = match x with Error e -> Error e | Ok v -> f v in
   let/ expr =
     match

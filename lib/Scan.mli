@@ -34,6 +34,13 @@ val search
 
     This lower-level interface is useful when the caller wants to
     intercept events as they arrive rather than receiving them all at once. *)
+(** [finding_filename f] returns the project-relative source path stored in
+    [f.loc.loc_start.pos_fname].  This accessor exists so that callers
+    outside the library (where [Location] may refer to a different module,
+    e.g. the LSP Location type) can retrieve the filename without needing to
+    qualify the compiler-libs record fields. *)
+val finding_filename : finding -> string
+
 val incremental_search
   :  'acc
   -> Paths.t
