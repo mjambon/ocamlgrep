@@ -1,33 +1,43 @@
-(* This file is part of the ocamlgrep package
+(* This file is part of the ocamlgrep package.
    See the attached LICENSE file.
    Copyright (C) 2026 LexiFi *)
-(**
-   Ocamlgrep library - type-aware search for OCaml code patterns
-*)
 
-(** Matching snippet of code. This will change.
-    It currently only shows the first line of the match.
-    TODO: include multiline match info
-*)
+(** Type-aware search for OCaml expression patterns. *)
+
+(** A match found in a source file. *)
 type finding = {
-  source: string;
-  i: int;
-  c1: int;
-  c2: int;
-  s: string;
+  loc   : Location.t;
+  lines : string list;
+  (** Source lines from [loc_start.pos_lnum] to [loc_end.pos_lnum],
+      inclusive. Always non-empty. *)
 }
 
-type event =
-  | Scan_file of string (** emitted when a new source file is about to be
-                            scanned *)
-  | Finding of finding (** found a matching region of code *)
-  | Warning of string (** a warning message, possibly containing line breaks *)
+type 'a event =
+  | Scan_file of string  (** a source file is about to be scanned *)
+  | Finding   of 'a      (** a matching region was found *)
+  | Warning   of string  (** non-fatal diagnostic (e.g. missing cmt files) *)
 
-(** [incremental_search paths handler] scans the project starting
-    from the search root embedded in [paths]. Each time a finding or a
-    warning is created, the [handler] function is called. *)
-val incremental_search : Paths.t -> (event -> unit) -> string -> unit
+(** [search ~root ~query] searches the Dune project rooted at (or
+    containing) [root] for OCaml expressions matching the pattern [query].
 
-(** Wrapper around [incremental_search] that returns the results as a list
-    at the end instead of incrementally. *)
-val search : Paths.t -> string -> event list
+    Returns [Ok (findings, warnings)] on success.
+    Returns [Error message] for user-facing errors such as a bad query
+    or a missing dune project. *)
+val search
+  :  root:string
+  -> query:string
+  -> (finding list * string list, string) result
+
+(** Generic incremental search.  Enumerate [cmt_files] (e.g. from
+    {!Dune_workspace.local_cmt_files}), call [search_fn] on each, and
+    accumulate results via [handle_event].
+
+    This lower-level interface is useful when the caller wants to
+    intercept events as they arrive rather than receiving them all at once. *)
+val incremental_search
+  :  'acc
+  -> Paths.t
+  -> string list
+  -> ('acc -> 'a event -> 'acc)
+  -> (Cmt_format.cmt_infos -> source:string -> src_lines:string array -> 'a list)
+  -> 'acc

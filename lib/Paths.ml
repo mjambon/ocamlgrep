@@ -72,9 +72,9 @@ let identify_dune_project
     else
       let dir' = Filename.dirname abs_dir in
       if dir' = abs_dir then
-        (* reached "/" *)
-        failwith "Could not detect _build";
-      loop (Filename.concat (Filename.basename abs_dir) prefix) dir'
+        Error "Could not find a Dune project (no _build/ directory found)"
+      else
+        loop (Filename.concat (Filename.basename abs_dir) prefix) dir'
   in
   let abs_search_root =
     Option.value ~default:Filename.current_dir_name (* . *) search_root
@@ -88,6 +88,8 @@ let identify_dune_project
 *)
 let in_build_dir paths source_path =
   Filename.concat paths.build_source_root source_path
+
+let build_source_root paths = paths.build_source_root
 
 (*
    Collect folders named 'byte' that contain cmi files:

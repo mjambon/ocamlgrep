@@ -53,3 +53,7 @@ val identify_dune_project :
     then [in_build_dir paths "bar.ml"] is [/project/_build/default/foo/bar.ml].
 *)
 val in_build_dir : t -> string -> string
+
+(** The root of the build artefact tree, e.g.
+    [<project_root>/_build/default]. *)
+val build_source_root : t -> string
