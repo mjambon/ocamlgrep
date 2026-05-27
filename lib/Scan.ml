@@ -67,15 +67,7 @@ let resolve_source (paths : Paths.t) source =
 (* Process one cmt file.  Returns [Ok acc] on success (cmt file existed
    and was processable) and [Error ()] when the cmt file is missing
    (project not yet built or partially built). *)
-let process_one_cmt
-    acc
-    (paths : Paths.t)
-    handle_event
-    (search : Cmt_format.cmt_infos
-              -> source:string
-              -> src_lines:string array
-              -> finding list)
-    cmt_path =
+let process_one_cmt acc (paths : Paths.t) handle_event search cmt_path =
   match Cmt_format.read_cmt cmt_path with
   | { Cmt_format.cmt_sourcefile = Some source;
       cmt_source_digest = Some digest; _ } as cmt ->

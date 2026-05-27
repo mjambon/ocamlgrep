@@ -314,7 +314,7 @@ let rec match_expr (pexpr : Parsetree.expression) texpr =
     | Texp_new _ | Texp_instvar _ | Texp_setinstvar _ | Texp_override _
     | Texp_letmodule _ | Texp_letexception _ | Texp_assert _ | Texp_lazy _
     | Texp_object _ | Texp_pack _ | Texp_letop _ | Texp_unreachable
-    | Texp_extension_constructor _ | Texp_open _ | Texp_typed_hole ) ->
+    | Texp_extension_constructor _ | Texp_open _ ) ->
     raise DontMatch
 
 and match_typ ptyp texpr =
