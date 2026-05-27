@@ -4,10 +4,10 @@
 
 open Printf
 
-(** A match found in a source file. *)
-type finding = {
+(** Re-export {!Match.finding} as the top-level finding type. *)
+type finding = Match.finding = {
   loc   : Location.t;
-  lines : string list;  (** source lines from loc_start.pos_lnum to loc_end.pos_lnum *)
+  lines : string list;
 }
 
 type 'a event =
@@ -24,16 +24,6 @@ let read_lines fn =
   String.split_on_char '\n'
     (In_channel.with_open_text fn In_channel.input_all)
 
-(* Extract lines [start_line .. end_line] (both 1-based inclusive) from
-   the source array.  Returns ["<source unavailable>"] when out of range. *)
-let extract_lines src_lines (loc : Location.t) =
-  let start_line = loc.loc_start.pos_lnum in  (* 1-based *)
-  let end_line   = loc.loc_end.pos_lnum   in
-  let n = Array.length src_lines in
-  if start_line < 1 || end_line > n then [ "<source unavailable>" ]
-  else
-    Array.to_list
-      (Array.sub src_lines (start_line - 1) (end_line - start_line + 1))
 
 (* Resolve [source] (from cmt_sourcefile) to:
      - a project-relative display path  (used in pos_fname)
@@ -155,16 +145,10 @@ let incremental_search
   else
     acc
 
-(* Build a [search_fn] from a parsed expression. *)
-let make_search_fn expr cmt ~source:_ ~src_lines =
-  match Match.search_cmt cmt expr with
-  | exception Match.Cannot_parse_type exn ->
-    raise (Failure (Format.asprintf "could not parse type constraint: %a"
-                      Location.report_exception exn))
-  | locs ->
-    List.map
-      (fun loc -> { loc; lines = extract_lines src_lines loc })
-      locs
+(* Delegate to Match.search, which handles location extraction and
+   pos_fname overriding.  Partial application on [expr] gives the
+   callback signature required by [incremental_search]. *)
+let make_search_fn expr = Match.search expr
 
 (** High-level search entry point for use by ocaml-lsp and similar tools.
 

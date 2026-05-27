@@ -4,8 +4,8 @@
 
 (** Type-aware search for OCaml expression patterns. *)
 
-(** A match found in a source file. *)
-type finding = {
+(** Alias for {!Match.finding}. *)
+type finding = Match.finding = {
   loc   : Location.t;
   lines : string list;
   (** Source lines from [loc_start.pos_lnum] to [loc_end.pos_lnum],
