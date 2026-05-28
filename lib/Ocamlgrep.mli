@@ -2,15 +2,33 @@
    See the attached LICENSE file.
    Copyright (C) 2026 LexiFi *)
 
+(*
+   This is the only module exposed by the library.
+*)
+
 (** Type-aware search for OCaml expression patterns. *)
+
+type location = {
+  loc_start : Lexing.position;
+  loc_end : Lexing.position;
+  loc_ghost : bool;
+}
+
+type finding = {
+  loc : location;
+  lines : string list;
+      (** Source lines spanned by [loc], from [loc_start.pos_lnum] to
+          [loc_end.pos_lnum] inclusive. Always non-empty. *)
+}
+(** A region of source code that matched a query pattern. *)
 
 type event =
   | Scan_file of string  (** a source file is about to be scanned *)
-  | Finding of Match.finding  (** a matching region was found *)
+  | Finding of finding  (** a matching region was found *)
   | Warning of string  (** non-fatal diagnostic (e.g. missing cmt files) *)
 
 val search :
-  ?root:string -> string -> (Match.finding list * string list, string) result
+  ?root:string -> string -> (finding list * string list, string) result
 (** [search ?root query] searches the Dune project rooted at [root] (or the
     project containing the current directory if [root] is omitted) for OCaml
     expressions matching the pattern [query].

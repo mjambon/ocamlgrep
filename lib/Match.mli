@@ -27,19 +27,12 @@
 
 exception Cannot_parse_type of exn
 
-type location = {
-  loc_start : Lexing.position;
-  loc_end : Lexing.position;
-  loc_ghost : bool;
-}
-
 type finding = {
-  loc : location;
+  loc : Location.t;
   lines : string list;
       (** Source lines spanned by [loc], from [loc_start.pos_lnum] to
           [loc_end.pos_lnum] inclusive. Always non-empty. *)
 }
-(** A region of source code that matched a query pattern. *)
 
 val parse_query : string -> Parsetree.expression
 (** [parse_query s] parses [s] as a single OCaml expression to be used as a

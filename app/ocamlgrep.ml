@@ -12,7 +12,6 @@
 *)
 
 open Printf
-open Ocamlgrep
 
 type color = Yellow | Red | Green
 
@@ -63,7 +62,7 @@ let highlight_range line lo hi =
 
    The header is unambiguous so consecutive findings need no
    separator between them. *)
-let print_finding (finding : Match.finding) =
+let print_finding (finding : Ocamlgrep.finding) =
   let start = finding.loc.loc_start in
   let end_ = finding.loc.loc_end in
   let file = color Green "%s" start.Lexing.pos_fname in
@@ -90,7 +89,7 @@ let print_finding (finding : Match.finding) =
   (* Flush so streamed output is interleaved with stderr warnings in order. *)
   printf "%!"
 
-let handle_event (ev : Scan.event) =
+let handle_event (ev : Ocamlgrep.event) =
   match ev with
   | Scan_file _path -> ()
   | Warning msg -> warn msg
@@ -189,7 +188,7 @@ let parse_argv () =
 let main () =
   try
     let query = parse_argv () in
-    match Scan.incremental_search handle_event query with
+    match Ocamlgrep.incremental_search handle_event query with
     | Ok () -> ()
     | Error msg -> failwith msg
   with

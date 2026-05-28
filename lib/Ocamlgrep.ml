@@ -4,10 +4,22 @@
 
 open Printf
 
-type event =
-  | Scan_file of string
-  | Finding of Match.finding
-  | Warning of string
+(*
+   We reuse the location type defined by compiler-libs because there's no
+   reason to define it differently.
+
+   To expose a stable interface and make sure users of ocamlgrep-lib
+   don't depend on compiler-libs interfaces, the type equation
+   [location = Location.t] is omitted in the mli.
+*)
+type location = Location.t = {
+  loc_start : Lexing.position;
+  loc_end : Lexing.position;
+  loc_ghost : bool;
+}
+
+type finding = Match.finding = { loc : location; lines : string list }
+type event = Scan_file of string | Finding of finding | Warning of string
 
 (*
    This allows transparently unwrapping Ok values:
