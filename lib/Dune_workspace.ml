@@ -1,44 +1,46 @@
 (* This file is part of the ocamlgrep package.
    See the attached LICENSE file.
    Copyright (C) 2026 LexiFi
+*)
 
-   Originally written for merlin by the merlin contributors;
-   adapted for standalone use here. *)
+(* See https://dune.build/blog/dune-describe/ for a description of what
+   we're doing here.
 
-(* Note: we do not use [ppx_sexp_conv] here so that [csexp] is our only
-   extra dependency beyond compiler-libs.common and unix. *)
+   We're not using [ppx_sexp_conv] here so that [csexp] is our only
+   extra dependency beyond compiler-libs.common and unix.
+*)
 
-type module_ =
-  { name : string;
-    impl : string option;
-    intf : string option;
-    cmt  : string option;
-    cmti : string option
-  }
+type module_ = {
+  name : string;
+  impl : string option;
+  intf : string option;
+  cmt : string option;
+  cmti : string option;
+}
 
-type library =
-  { name        : string;
-    uid         : string;
-    local        : bool;
-    requires    : string list;
-    source_dir  : string;
-    modules     : module_ list;
-    include_dirs : string list
-  }
+type library = {
+  name : string;
+  uid : string;
+  local : bool;
+  requires : string list;
+  source_dir : string;
+  modules : module_ list;
+  include_dirs : string list;
+}
 
-type executables =
-  { names       : string list;
-    requires    : string list;
-    modules     : module_ list;
-    include_dirs : string list
-  }
+type executables = {
+  names : string list;
+  requires : string list;
+  modules : module_ list;
+  include_dirs : string list;
+}
 
-type t =
-  { root          : string;
-    build_context : string;
-    libraries     : library list;
-    executables   : executables list
-  }
+type t = {
+  root : string;
+  build_context : string;
+  libraries : library list;
+  executables : executables list;
+}
 
 (*** Csexp parsers ***)
 
@@ -163,15 +165,23 @@ let read_all ic =
   in
   loop ()
 
-let describe ?context ?root () =
+(* Invoke 'dune describe workspace' *)
+let describe ?context ?dirs ?root () =
   let base_args = [ "describe"; "workspace"; "--format=csexp"; "--lang"; "0.1" ] in
-  let args = match context with
-    | None      -> base_args
+  let args =
+    match context with
+    | None -> base_args
     | Some name -> base_args @ [ "--context"; name ]
   in
-  let args = match root with
-    | None     -> args
+  let args =
+    match root with
+    | None -> args
     | Some dir -> args @ [ "--root"; dir ]
+  in
+  let args =
+    match dirs with
+    | None -> args
+    | Some dirs -> args @ dirs
   in
   let argv = Array.of_list ("dune" :: args) in
   let env  = Unix.environment () in
@@ -199,18 +209,16 @@ let describe ?context ?root () =
      | WSTOPPED  n ->
        Error (Printf.sprintf "dune describe workspace stopped by signal %d" n))
 
-let local_cmt_files t =
-  let from_modules acc modules =
-    List.fold_left
-      (fun acc m -> match m.cmt with None -> acc | Some p -> p :: acc)
-      acc modules
-  in
+let get_modules t =
   let acc =
     List.fold_left
-      (fun acc lib -> if lib.local then from_modules acc lib.modules else acc)
+      (fun acc lib ->
+         if lib.local then List.rev_append lib.modules acc else acc)
       [] t.libraries
   in
   let acc =
-    List.fold_left (fun acc e -> from_modules acc e.modules) acc t.executables
+    List.fold_left
+      (fun acc e -> List.rev_append e.modules acc)
+      acc t.executables
   in
   List.rev acc
