@@ -40,6 +40,14 @@ let resolve_source (workspace : Dune_workspace.t)
   | None -> Error (sprintf "missing ml file for module %s" module_.name)
   | Some impl_path -> Ok (relativize (workspace.build_context ^ "/") impl_path)
 
+(* True when [dir] is the root of a Dune project.  We check for this before
+   running 'dune describe workspace --root dir' to avoid creating a spurious
+   _build directory in directories that are not Dune projects. *)
+let is_dune_project_root dir =
+  List.exists
+    (fun f -> Sys.file_exists (Filename.concat dir f))
+    [ "dune-project"; "dune-workspace" ]
+
 (* We return Ok/Error for stats purposes only.
    Error messages are passed to the handler as they occur. *)
 let process_one_cmt (workspace : Dune_workspace.t)
@@ -47,6 +55,9 @@ let process_one_cmt (workspace : Dune_workspace.t)
     =
   let warning msg = handle_event (Warning msg) in
   let/ cmt_path = Option.to_result ~none:() module_.cmt in
+  (* module_.cmt is relative to workspace.root; make it absolute so that
+     Cmt_format.read_cmt works regardless of the process's working directory. *)
+  let cmt_path = Filename.concat workspace.root cmt_path in
   match Cmt_format.read_cmt cmt_path with
   | { cmt_source_digest = Some digest; _ } as cmt -> (
       let/ source =
@@ -90,37 +101,40 @@ let process_one_cmt (workspace : Dune_workspace.t)
 
 (** Generic incremental search. [search_fn] is called for each cmt file and
     should return a list of findings. [handle_event] accumulates state. *)
-let incremental_search (handle_event : event -> unit) query =
+let incremental_search ?root (handle_event : event -> unit) query =
   let/ expr =
     match Parse.implementation (Lexing.from_string query) with
     | [ { Parsetree.pstr_desc = Pstr_eval (x, _); _ } ] -> Ok x
     | _ -> Error "Can only search for an expression."
     | exception _ -> Error "Could not parse search expression."
   in
-  let/ workspace = Dune_workspace.describe () in
-  let modules = Dune_workspace.get_modules workspace in
-  let total = List.length modules in
-  let successes =
-    List.fold_left
-      (fun successes module_ ->
-        match process_one_cmt workspace module_ handle_event expr with
-        | Ok () -> successes + 1
-        | Error () -> successes)
-      0 modules
-  in
-  (if successes < total then
-     let missing = total - successes in
-     let pct = float (successes * 100) /. float total in
-     handle_event
-       (Warning
-          (sprintf
-             "%d/%d cmt files found (%.1f%% coverage); %d missing — run 'dune \
-              build @check' to generate them"
-             successes total pct missing)));
-  Ok ()
+  match root with
+  | Some r when not (is_dune_project_root r) -> Ok ()
+  | _ ->
+      let/ workspace = Dune_workspace.describe ?root () in
+      let modules = Dune_workspace.get_modules workspace in
+      let total = List.length modules in
+      let successes =
+        List.fold_left
+          (fun successes module_ ->
+            match process_one_cmt workspace module_ handle_event expr with
+            | Ok () -> successes + 1
+            | Error () -> successes)
+          0 modules
+      in
+      (if successes < total then
+         let missing = total - successes in
+         let pct = float (successes * 100) /. float total in
+         handle_event
+           (Warning
+              (sprintf
+                 "%d/%d cmt files found (%.1f%% coverage); %d missing — run \
+                  'dune build @check' to generate them"
+                 successes total pct missing)));
+      Ok ()
 
 (* High-level search entry point for use by ocaml-lsp and similar tools. *)
-let search query =
+let search ?root query =
   let findings = ref [] in
   let warnings = ref [] in
   let handle_event = function
@@ -128,5 +142,5 @@ let search query =
     | Finding f -> findings := f :: !findings
     | Warning w -> warnings := w :: !warnings
   in
-  let/ () = incremental_search handle_event query in
+  let/ () = incremental_search ?root handle_event query in
   Ok (List.rev !findings, List.rev !warnings)
