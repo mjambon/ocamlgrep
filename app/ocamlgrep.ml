@@ -14,10 +14,7 @@
 open Printf
 open Ocamlgrep
 
-type color =
-  | Yellow
-  | Red
-  | Green
+type color = Yellow | Red | Green
 
 (* Colors are emitted unless the user opts out via the standard NO_COLOR env
    variable (https://no-color.org/). This keeps the snapshot tests readable
@@ -31,12 +28,13 @@ let color c fmt =
   if use_colors then
     sprintf
       ("\027[1;%dm" ^^ fmt ^^ "\027[0m")
-      (match c with Yellow -> 33 | Red -> 31 | Green -> 32)
-  else
-    sprintf fmt
+      (match c with
+      | Yellow -> 33
+      | Red -> 31
+      | Green -> 32)
+  else sprintf fmt
 
-let warn msg =
-  eprintf "%s: %s\n%!" (color Yellow "Warning") msg
+let warn msg = eprintf "%s: %s\n%!" (color Yellow "Warning") msg
 
 (* Highlight the substring [s.[lo..hi)] in red. Out-of-range indices
    are clamped silently — a stale cmt could in principle produce them
@@ -76,8 +74,7 @@ let print_finding (f : Match.finding) =
   let header =
     if start_line = end_line then
       sprintf "%s:%d:%d-%d:" file start_line start_col end_col
-    else
-      sprintf "%s:%d:%d-%d:%d:" file start_line start_col end_line end_col
+    else sprintf "%s:%d:%d-%d:%d:" file start_line start_col end_line end_col
   in
   print_endline header;
   let gutter_width = String.length (string_of_int end_line) in
@@ -86,7 +83,8 @@ let print_finding (f : Match.finding) =
       let lineno = start_line + i in
       let lo = if lineno = start_line then start_col else 0 in
       let hi = if lineno = end_line then end_col else String.length line in
-      printf "%s | %s\n" (color Yellow "%*d" gutter_width lineno)
+      printf "%s | %s\n"
+        (color Yellow "%*d" gutter_width lineno)
         (highlight_range line lo hi))
     f.lines;
   (* Flush so streamed output is interleaved with stderr warnings in order. *)
@@ -99,7 +97,7 @@ let handle_event (ev : Scan.event) =
   | Finding finding -> print_finding finding
 
 let usage_msg =
-{|Usage: ocamlgrep <pattern>
+  {|Usage: ocamlgrep <pattern>
 
 Search a Dune project for OCaml code matching a structural pattern.
 ocamlgrep walks the cmt files under _build/ and matches each typed
@@ -186,8 +184,7 @@ let parse_argv () =
   | None ->
       Arg.usage [] usage_msg;
       exit 1
-  | Some query ->
-      query
+  | Some query -> query
 
 let main () =
   try
@@ -195,13 +192,16 @@ let main () =
     match Scan.incremental_search handle_event query with
     | Ok () -> ()
     | Error msg -> failwith msg
-  with exn ->
-    let s =
-      match exn with
-      | Failure s | Sys_error s -> s
-      | exn -> Printexc.to_string exn
-    in
-    eprintf "%s: %s\n%!" (color Red "Error") s;
-    exit 1
+  with
+  | exn ->
+      let s =
+        match exn with
+        | Failure s
+        | Sys_error s ->
+            s
+        | exn -> Printexc.to_string exn
+      in
+      eprintf "%s: %s\n%!" (color Red "Error") s;
+      exit 1
 
 let () = main ()

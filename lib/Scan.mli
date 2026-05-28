@@ -9,14 +9,13 @@ type event =
   | Finding of Match.finding  (** a matching region was found *)
   | Warning of string  (** non-fatal diagnostic (e.g. missing cmt files) *)
 
-(** [search query] searches the local Dune project for
-    OCaml expressions matching the pattern [query].
-
-    Returns [Ok (findings, warnings)] on success.
-    Returns [Error message] for user-facing errors such as a bad query
-    or a missing dune project. *)
 val search : string -> (Match.finding list * string list, string) result
+(** [search query] searches the local Dune project for OCaml expressions
+    matching the pattern [query].
 
-(** Same as [search] but lets the caller report findings and warnings
-    as they come rather than waiting for the end of the scan. *)
+    Returns [Ok (findings, warnings)] on success. Returns [Error message] for
+    user-facing errors such as a bad query or a missing dune project. *)
+
 val incremental_search : (event -> unit) -> string -> (unit, string) result
+(** Same as [search] but lets the caller report findings and warnings as they
+    come rather than waiting for the end of the scan. *)
