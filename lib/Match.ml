@@ -354,12 +354,12 @@ and match_typ ptyp texpr =
       begin try Ctype.is_moregeneral env false typ texpr with
       | Assert_failure _ -> false
       end
-  | exception _ ->
-      begin match (ptyp.Parsetree.ptyp_desc, Types.get_desc texpr) with
+  | exception _ -> begin
+      match (ptyp.Parsetree.ptyp_desc, Types.get_desc texpr) with
       | ( Ptyp_constr ({ Location.txt; loc = _ }, pty_args),
           Tconstr (path, ty_args, _) ) ->
-          if path_matches_lident txt path then
-            begin match pty_args with
+          if path_matches_lident txt path then begin
+            match pty_args with
             | [
              {
                ptyp_desc =
@@ -372,7 +372,7 @@ and match_typ ptyp texpr =
                 if List.length ty_args = List.length pty_args then
                   List.for_all2 match_typ pty_args ty_args
                 else false
-            end
+          end
           else false
       | ( ( Ptyp_any | Ptyp_var _ | Ptyp_arrow _ | Ptyp_tuple _ | Ptyp_constr _
           | Ptyp_object _ | Ptyp_class _ | Ptyp_alias _ | Ptyp_variant _
@@ -381,7 +381,7 @@ and match_typ ptyp texpr =
           | Tnil | Tlink _ | Tsubst _ | Tvariant _ | Tunivar _ | Tpoly _
           | Tpackage _ ) ) ->
           false
-      end
+    end
 
 and match_pat : type k. _ -> k general_pattern -> _ =
  fun ppat tpat ->

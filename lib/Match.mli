@@ -19,10 +19,10 @@
     {2 Examples}
 
     {[
-    List.filter __ __ (* all calls to List.filter *)
-      (__ : int list) (* all expressions of type int list *)
-      __1
-    :: __1 (* cons cells with same head and tail *)
+      List.filter __ __ (* all calls to List.filter *)
+        (__ : int list) (* all expressions of type int list *)
+        __1
+      :: __1 (* cons cells with same head and tail *)
     ]} *)
 
 exception Cannot_parse_type of exn
@@ -58,6 +58,6 @@ val search :
     Partial application on [query] gives a function with the signature expected
     by {!Scan.incremental_search}:
     {[
-    let search_fn = Match.search expr in
-    Scan.incremental_search acc paths cmt_files handler search_fn
+      let search_fn = Match.search expr in
+      Scan.incremental_search acc paths cmt_files handler search_fn
     ]} *)
