@@ -27,8 +27,14 @@
 
 exception Cannot_parse_type of exn
 
+type location = {
+  loc_start : Lexing.position;
+  loc_end : Lexing.position;
+  loc_ghost : bool;
+}
+
 type finding = {
-  loc : Location.t;
+  loc : location;
   lines : string list;
       (** Source lines spanned by [loc], from [loc_start.pos_lnum] to
           [loc_end.pos_lnum] inclusive. Always non-empty. *)

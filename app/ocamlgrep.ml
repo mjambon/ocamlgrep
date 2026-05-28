@@ -63,14 +63,14 @@ let highlight_range line lo hi =
 
    The header is unambiguous so consecutive findings need no
    separator between them. *)
-let print_finding (f : Match.finding) =
-  let s = f.loc.Location.loc_start in
-  let e = f.loc.Location.loc_end in
-  let file = color Green "%s" s.Lexing.pos_fname in
-  let start_line = s.Lexing.pos_lnum in
-  let start_col = s.Lexing.pos_cnum - s.Lexing.pos_bol in
-  let end_line = e.Lexing.pos_lnum in
-  let end_col = e.Lexing.pos_cnum - e.Lexing.pos_bol in
+let print_finding (finding : Match.finding) =
+  let start = finding.loc.loc_start in
+  let end_ = finding.loc.loc_end in
+  let file = color Green "%s" start.Lexing.pos_fname in
+  let start_line = start.Lexing.pos_lnum in
+  let start_col = start.Lexing.pos_cnum - start.Lexing.pos_bol in
+  let end_line = end_.Lexing.pos_lnum in
+  let end_col = end_.Lexing.pos_cnum - end_.Lexing.pos_bol in
   let header =
     if start_line = end_line then
       sprintf "%s:%d:%d-%d:" file start_line start_col end_col
@@ -86,7 +86,7 @@ let print_finding (f : Match.finding) =
       printf "%s | %s\n"
         (color Yellow "%*d" gutter_width lineno)
         (highlight_range line lo hi))
-    f.lines;
+    finding.lines;
   (* Flush so streamed output is interleaved with stderr warnings in order. *)
   printf "%!"
 
