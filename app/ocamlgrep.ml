@@ -36,7 +36,7 @@ let color c fmt =
 let warn msg = eprintf "%s: %s\n%!" (color Yellow "Warning") msg
 
 (* Highlight the substring [s.[lo..hi)] in red. Out-of-range indices
-   are clamped silently — a stale cmt could in principle produce them
+   are clamped silently - a stale cmt could in principle produce them
    even after the digest check, and crashing the renderer would be a
    poor failure mode. *)
 let highlight_range line lo hi =
@@ -89,11 +89,15 @@ let print_finding (finding : Ocamlgrep.finding) =
   (* Flush so streamed output is interleaved with stderr warnings in order. *)
   printf "%!"
 
-let handle_event (ev : Ocamlgrep.event) =
+let handle_event ~has_finding ~has_warning (ev : Ocamlgrep.event) =
   match ev with
-  | Scan_file _path -> ()
-  | Warning msg -> warn msg
-  | Finding finding -> print_finding finding
+  | Scan_module _module -> ()
+  | Warning msg ->
+      has_warning := true;
+      warn msg
+  | Finding finding ->
+      has_finding := true;
+      print_finding finding
 
 let usage_msg =
   {|Usage: ocamlgrep <pattern>
@@ -173,23 +177,66 @@ OCaml-compiler-style gutter:
 The matched range is highlighted in red unless the standard NO_COLOR
 environment variable is set (https://no-color.org/).
 
+Exit codes
+==========
+
+0: one or more matches were found
+1: no matches were found
+2: an error occurred, or a warning occurred in --strict mode
+
 Options
 =======|}
 
+type conf = { query : string; debug : bool; strict : bool }
+
 let parse_argv () =
   let query = ref None in
-  Arg.parse [] (fun s -> query := Some s) usage_msg;
-  match !query with
-  | None ->
-      Arg.usage [] usage_msg;
-      exit 1
-  | Some query -> query
+  let debug = ref false in
+  let strict = ref false in
+  let handle_anon_arg str =
+    match !query with
+    | Some _ ->
+        Arg.usage [] usage_msg;
+        exit 1
+    | None -> query := Some str
+  in
+  let options =
+    [
+      ("--debug", Arg.Set debug, " print debugging information on stderr");
+      ( "--strict",
+        Arg.Set strict,
+        " exit with a nonzero code if there's any warning" );
+    ]
+  in
+  Arg.parse options handle_anon_arg usage_msg;
+  let query =
+    match !query with
+    | None ->
+        Arg.usage [] usage_msg;
+        exit 1
+    | Some query -> query
+  in
+  { query; debug = !debug; strict = !strict }
+
+(* Exit codes as documented in --help *)
+let exit_matched = 0
+let exit_no_match = 1
+let exit_error = 2
 
 let main () =
   try
-    let query = parse_argv () in
-    match Ocamlgrep.incremental_search handle_event query with
-    | Ok () -> ()
+    let conf = parse_argv () in
+    let has_finding = ref false in
+    let has_warning = ref false in
+    match
+      Ocamlgrep.incremental_search ~debug:conf.debug
+        (handle_event ~has_finding ~has_warning)
+        conf.query
+    with
+    | Ok () ->
+        if conf.strict && !has_warning then exit exit_error
+        else if !has_finding then exit exit_matched
+        else exit exit_no_match
     | Error msg -> failwith msg
   with
   | exn ->
@@ -201,6 +248,6 @@ let main () =
         | exn -> Printexc.to_string exn
       in
       eprintf "%s: %s\n%!" (color Red "Error") s;
-      exit 1
+      exit exit_error
 
 let () = main ()

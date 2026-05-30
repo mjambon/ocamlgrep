@@ -507,20 +507,22 @@ let search_cmt query_expr cmt =
   end;
   List.sort Stdlib.compare !res
 
-let search query_expr cmt ~source ~src_lines =
-  let nb_lines = Array.length src_lines in
-  let with_fname (pos : Lexing.position) = { pos with pos_fname = source } in
+let read_lines path =
+  In_channel.with_open_text path In_channel.input_all
+  |> String.split_on_char '\n' |> Array.of_list
+
+let search ~make_valid_path query_expr cmt =
+  (* We can't assume a single source file because a preprocessed file
+     contains locations referring to more than one source file. *)
+  let get_file_lines = memoize (Hashtbl.create 10) read_lines in
   List.filter_map
-    (fun ({ Location.loc_start; loc_end; loc_ghost } : Location.t) ->
-      let s = max 1 (min nb_lines loc_start.pos_lnum) in
-      let e = max s (min nb_lines loc_end.pos_lnum) in
-      let lines = List.init (e - s + 1) (fun k -> src_lines.(s - 1 + k)) in
-      let loc =
-        {
-          Location.loc_start = with_fname loc_start;
-          loc_end = with_fname loc_end;
-          loc_ghost;
-        }
-      in
-      Some { loc; lines })
+    (fun ({ loc_start; loc_end; loc_ghost } as loc : Location.t) ->
+      if loc_ghost then None
+      else
+        let src_lines = get_file_lines (make_valid_path loc_start.pos_fname) in
+        let num_lines = Array.length src_lines in
+        let s = max 1 (min num_lines loc_start.pos_lnum) in
+        let e = max s (min num_lines loc_end.pos_lnum) in
+        let lines = List.init (e - s + 1) (fun k -> src_lines.(s - 1 + k)) in
+        Some { loc; lines })
     (search_cmt query_expr cmt)

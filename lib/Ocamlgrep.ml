@@ -19,7 +19,7 @@ type location = Location.t = {
 }
 
 type finding = Match.finding = { loc : location; lines : string list }
-type event = Scan_file of string | Finding of finding | Warning of string
+type event = Scan_module of string | Finding of finding | Warning of string
 
 (*
    This allows transparently unwrapping Ok values:
@@ -28,6 +28,9 @@ type event = Scan_file of string | Finding of finding | Warning of string
    Ok (transform_further unwrapped)
 *)
 let ( let/ ) = Result.bind
+
+(* Safe file path concatenation - same behavior as Fpath.(//) *)
+let ( // ) a b = if Filename.is_relative b then Filename.concat a b else b
 
 let drop_prefix ~prefix s =
   if String.starts_with ~prefix s then
@@ -39,66 +42,143 @@ let drop_prefix ~prefix s =
 
     relativize "a/b/" "a/b/c/d" -> "c/d"
 *)
-let relativize root path = drop_prefix ~prefix:root path
-
-let read_lines fn =
-  String.split_on_char '\n' (In_channel.with_open_text fn In_channel.input_all)
-
-(* Return a relative path to the source file.
-   Dune returns a path to a copy of the source file. *)
-let resolve_source (workspace : Dune_workspace.t)
-    (module_ : Dune_workspace.module_) =
-  match module_.impl with
-  | None -> Error (sprintf "missing ml file for module %s" module_.name)
-  | Some impl_path -> Ok (relativize (workspace.build_context ^ "/") impl_path)
+let _relativize root path = drop_prefix ~prefix:root path
 
 (* True when [dir] is the root of a Dune project.  We check for this before
    running 'dune describe workspace --root dir' to avoid creating a spurious
    _build directory in directories that are not Dune projects. *)
 let is_dune_project_root dir =
   List.exists
-    (fun f -> Sys.file_exists (Filename.concat dir f))
+    (fun f -> Sys.file_exists (dir // f))
     [ "dune-project"; "dune-workspace" ]
 
+(*
+   We gather up all the paths involved in the chain leading to the creation
+   of a cmt file so we can troubleshoot easily.
+
+   If the cmt file is missing or the digest of its input file
+   couldn't be validated, or if anything else goes wrong, the error goes into
+   the 'error' field.
+
+   All paths are relative to the Dune project root.
+*)
+type cmt_diagnostics = {
+  build_cmt_source_path : string;
+      (* _build/default/src/a.ml
+       or _build/default/src/a.pp.ml
+       or _build/default/src/a__.ml-gen
+
+       This is the input file of the compiler that produced the cmt file.
+       We use it only to check the validity of the checksum found in the
+       cmt file.
+
+       This is not in general the source file or a copy of the source file.
+       Location info found in the node of the AST or the typed tree is
+       what gives us the source file names.
+    *)
+  build_cmt_path : string;
+      (* _build/default/src/.a.objs/byte/a.cmt
+       file containing the typed tree *)
+  error : string option;
+}
+
+let show_nullable show = function
+  | None -> "<none>"
+  | Some x -> show x
+
+let show_cmt_diagnostics (x : cmt_diagnostics) =
+  sprintf "{ build_cmt_source_path: %s\n  build_cmt_path: %s\n  error: %s }"
+    x.build_cmt_source_path x.build_cmt_path
+    (show_nullable (fun s -> sprintf "%S" s) x.error)
+
+(* Use this to build a valid file system path from a path that's relative
+   to the project root.
+   e.g. src/foo -> /path/to/src/foo
+*)
+let _absolute_source_path (workspace : Dune_workspace.t) in_project_path =
+  workspace.root // in_project_path
+
+(* Use this to build a valid file system path from a path that's relative
+   to the build space under the project root.
+   e.g. src/foo -> /path/to/_build/default/src/foo
+*)
+let absolute_build_path (workspace : Dune_workspace.t) in_project_path =
+  workspace.root // workspace.build_context // in_project_path
+
+let check_ml_digest ws ~cmt_path ~cmt_sourcefile ~cmt_source_digest =
+  match
+    cmt_source_digest = Digest.file (absolute_build_path ws cmt_sourcefile)
+  with
+  | true -> Ok ()
+  | false ->
+      Error
+        (sprintf
+           "the checksum expected by the cmt file %S doesn't match the \
+            checksum of the input file %S"
+           cmt_path cmt_sourcefile)
+  | exception Sys_error _ -> Error (sprintf "missing file %S" cmt_sourcefile)
+
+(*
+   Check the validity of a cmt file with respect to the compiler's input
+   (.pp.ml or .ml). This uses info provided by 'dune describe workspace'
+   but also inspects the file system for paths that are embedded in the
+   cmt file.
+
+   module_: info about one module from the Dune workspace
+   cmd_sourcefile: "source" path extracted from the cmt file
+   cmd_source_digest: MD5 checksum also extracted from the cmt file
+*)
+let resolve_cmt (workspace : Dune_workspace.t) ~cmt_path ~cmt_sourcefile
+    ~cmt_source_digest : cmt_diagnostics =
+  let error =
+    match
+      check_ml_digest workspace ~cmt_path ~cmt_sourcefile ~cmt_source_digest
+    with
+    | Ok () -> None
+    | Error msg -> Some msg
+  in
+  { build_cmt_source_path = cmt_sourcefile; build_cmt_path = cmt_path; error }
+
 (* We return Ok/Error for stats purposes only.
-   Error messages are passed to the handler as they occur. *)
-let process_one_cmt (workspace : Dune_workspace.t)
+   Error messages are passed to the handler as they occur.
+
+   Paths are kept relative to the workspace root as much as possible,
+   converted only to valid file system paths when accessing the files.
+*)
+let process_one_cmt ?(debug = false) (workspace : Dune_workspace.t)
     (module_ : Dune_workspace.module_) handle_event query : (unit, unit) result
     =
   let warning msg = handle_event (Warning msg) in
   let/ cmt_path = Option.to_result ~none:() module_.cmt in
-  (* module_.cmt is relative to workspace.root; make it absolute so that
-     Cmt_format.read_cmt works regardless of the process's working directory. *)
-  let cmt_path = Filename.concat workspace.root cmt_path in
   match Cmt_format.read_cmt cmt_path with
-  | { cmt_source_digest = Some digest; _ } as cmt -> (
-      let/ source =
-        match resolve_source workspace module_ with
-        | Ok x -> Ok x
-        | Error msg ->
+  | {
+      cmt_source_digest = Some cmt_source_digest;
+      cmt_sourcefile = Some cmt_sourcefile;
+      _;
+    } as cmt -> (
+      let paths =
+        resolve_cmt workspace ~cmt_path ~cmt_sourcefile ~cmt_source_digest
+      in
+      if debug then eprintf "%s\n%!" (show_cmt_diagnostics paths);
+      let/ () =
+        match paths.error with
+        | None -> Ok ()
+        | Some msg ->
             warning msg;
             Error ()
       in
-      let abs_source = Filename.concat workspace.root source in
-      handle_event (Scan_file source);
-      if not (Sys.file_exists abs_source) then (
-        warning (sprintf "missing source file %s" abs_source);
-        Error ())
-      else if digest <> Digest.file abs_source then (
-        warning
-          (sprintf "%s does not correspond to %s (ignoring)" cmt_path abs_source);
-        Error ())
-      else
-        let src_lines = Array.of_list (read_lines abs_source) in
-        match Match.search query cmt ~source ~src_lines with
-        | exception exn ->
-            warning
-              (Format.asprintf "error while analysing %s: %a" cmt_path
-                 Location.report_exception exn);
-            Error ()
-        | results ->
-            List.iter (fun r -> handle_event (Finding r)) results;
-            Ok ())
+      handle_event (Scan_module module_.name);
+      match
+        Match.search ~make_valid_path:(absolute_build_path workspace) query cmt
+      with
+      | exception exn ->
+          warning
+            (Format.asprintf "error while analyzing %s: %a" cmt_path
+               Location.report_exception exn);
+          Error ()
+      | results ->
+          List.iter (fun r -> handle_event (Finding r)) results;
+          Ok ())
   | { cmt_sourcefile = None; _ }
   | { cmt_source_digest = None; _ } ->
       Ok ()
@@ -113,7 +193,7 @@ let process_one_cmt (workspace : Dune_workspace.t)
 
 (** Generic incremental search. [search_fn] is called for each cmt file and
     should return a list of findings. [handle_event] accumulates state. *)
-let incremental_search ?root (handle_event : event -> unit) query =
+let incremental_search ?debug ?root (handle_event : event -> unit) query =
   let/ expr =
     match Parse.implementation (Lexing.from_string query) with
     | [ { Parsetree.pstr_desc = Pstr_eval (x, _); _ } ] -> Ok x
@@ -129,7 +209,9 @@ let incremental_search ?root (handle_event : event -> unit) query =
       let successes =
         List.fold_left
           (fun successes module_ ->
-            match process_one_cmt workspace module_ handle_event expr with
+            match
+              process_one_cmt ?debug workspace module_ handle_event expr
+            with
             | Ok () -> successes + 1
             | Error () -> successes)
           0 modules
@@ -140,19 +222,19 @@ let incremental_search ?root (handle_event : event -> unit) query =
          handle_event
            (Warning
               (sprintf
-                 "%d/%d cmt files found (%.1f%% coverage); %d missing — run \
+                 "%d/%d cmt files found (%.1f%% coverage); %d missing - run \
                   'dune build @check' to generate them"
                  successes total pct missing)));
       Ok ()
 
 (* High-level search entry point for use by ocaml-lsp and similar tools. *)
-let search ?root query =
+let search ?debug ?root query =
   let findings = ref [] in
   let warnings = ref [] in
   let handle_event = function
-    | Scan_file _ -> ()
+    | Scan_module _ -> ()
     | Finding f -> findings := f :: !findings
     | Warning w -> warnings := w :: !warnings
   in
-  let/ () = incremental_search ?root handle_event query in
+  let/ () = incremental_search ?debug ?root handle_event query in
   Ok (List.rev !findings, List.rev !warnings)

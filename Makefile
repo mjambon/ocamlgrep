@@ -3,11 +3,17 @@
 # '@check' is for producing cmt files so we can run ocamlgrep on its codebase.
 .PHONY: build
 build:
-	dune build @check
+	dune build
 
 .PHONY: demo
-demo: build
+demo:
+	dune build @check
 	dune exec -- ocamlgrep '(__ : Location.t)'
+
+.PHONY: test
+test:
+	dune build @check
+	dune exec -- ocamlgrep '__' --strict
 
 # Install opam dependencies
 .PHONY: setup
