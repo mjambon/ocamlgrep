@@ -95,7 +95,7 @@ let show_cmt_diagnostics (x : cmt_diagnostics) =
    to the project root.
    e.g. src/foo -> /path/to/src/foo
 *)
-let _absolute_source_path (workspace : Dune_workspace.t) in_project_path =
+let absolute_project_path (workspace : Dune_workspace.t) in_project_path =
   workspace.root // in_project_path
 
 (* Use this to build a valid file system path from a path that's relative
@@ -149,8 +149,11 @@ let process_one_cmt ?(debug = false) (workspace : Dune_workspace.t)
     (module_ : Dune_workspace.module_) handle_event query : (unit, unit) result
     =
   let warning msg = handle_event (Warning msg) in
-  let/ cmt_path = Option.to_result ~none:() module_.cmt in
-  match Cmt_format.read_cmt cmt_path with
+  let/ cmt_path =
+    (* path from the project root: _build/default/xxxxx *)
+    Option.to_result ~none:() module_.cmt
+  in
+  match Cmt_format.read_cmt (absolute_project_path workspace cmt_path) with
   | {
       cmt_source_digest = Some cmt_source_digest;
       cmt_sourcefile = Some cmt_sourcefile;
