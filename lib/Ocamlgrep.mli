@@ -30,6 +30,7 @@ type event =
 val search :
   ?debug:bool ->
   ?root:string ->
+  ?scan_root:string ->
   string ->
   (finding list * string list, string) result
 (** [search ?root query] searches the Dune project rooted at [root] (or the
@@ -46,6 +47,7 @@ val search :
 val incremental_search :
   ?debug:bool ->
   ?root:string ->
+  ?scan_root:string ->
   (event -> unit) ->
   string ->
   (unit, string) result

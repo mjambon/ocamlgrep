@@ -193,7 +193,8 @@ let process_one_cmt ?(debug = false) (workspace : Dune_workspace.t)
 
 (** Generic incremental search. [search_fn] is called for each cmt file and
     should return a list of findings. [handle_event] accumulates state. *)
-let incremental_search ?debug ?root (handle_event : event -> unit) query =
+let incremental_search ?debug ?root ?scan_root (handle_event : event -> unit)
+    query =
   let/ expr =
     match Parse.implementation (Lexing.from_string query) with
     | [ { Parsetree.pstr_desc = Pstr_eval (x, _); _ } ] -> Ok x
@@ -203,7 +204,12 @@ let incremental_search ?debug ?root (handle_event : event -> unit) query =
   match root with
   | Some r when not (is_dune_project_root r) -> Ok ()
   | _ ->
-      let/ workspace = Dune_workspace.describe ?root () in
+      let dirs =
+        match scan_root with
+        | None -> None
+        | Some dir -> Some [ dir ]
+      in
+      let/ workspace = Dune_workspace.describe ?root ?dirs () in
       let modules = Dune_workspace.get_modules workspace in
       let total = List.length modules in
       let successes =
@@ -228,7 +234,7 @@ let incremental_search ?debug ?root (handle_event : event -> unit) query =
       Ok ()
 
 (* High-level search entry point for use by ocaml-lsp and similar tools. *)
-let search ?debug ?root query =
+let search ?debug ?root ?scan_root query =
   let findings = ref [] in
   let warnings = ref [] in
   let handle_event = function
@@ -236,5 +242,5 @@ let search ?debug ?root query =
     | Finding f -> findings := f :: !findings
     | Warning w -> warnings := w :: !warnings
   in
-  let/ () = incremental_search ?debug ?root handle_event query in
+  let/ () = incremental_search ?debug ?root ?scan_root handle_event query in
   Ok (List.rev !findings, List.rev !warnings)

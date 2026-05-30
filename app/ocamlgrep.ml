@@ -13,6 +13,8 @@
 
 open Printf
 
+(* Configuration derived from command-line parsing *)
+type conf = { query : string; scan_root : string; debug : bool; strict : bool }
 type color = Yellow | Red | Green
 
 (* Colors are emitted unless the user opts out via the standard NO_COLOR env
@@ -89,9 +91,11 @@ let print_finding (finding : Ocamlgrep.finding) =
   (* Flush so streamed output is interleaved with stderr warnings in order. *)
   printf "%!"
 
-let handle_event ~has_finding ~has_warning (ev : Ocamlgrep.event) =
+let handle_event ~has_finding ~has_warning (conf : conf) (ev : Ocamlgrep.event)
+    =
   match ev with
-  | Scan_module _module -> ()
+  | Scan_module module_ ->
+      if conf.debug then eprintf "scan module %s\n%!" module_
   | Warning msg ->
       has_warning := true;
       warn msg
@@ -100,7 +104,7 @@ let handle_event ~has_finding ~has_warning (ev : Ocamlgrep.event) =
       print_finding finding
 
 let usage_msg =
-  {|Usage: ocamlgrep <pattern>
+  {|Usage: ocamlgrep <pattern> [scan_root]
 
 Search a Dune project for OCaml code matching a structural pattern.
 ocamlgrep walks the cmt files under _build/ and matches each typed
@@ -187,36 +191,29 @@ Exit codes
 Options
 =======|}
 
-type conf = { query : string; debug : bool; strict : bool }
-
 let parse_argv () =
-  let query = ref None in
+  let anon_args = ref [] in
   let debug = ref false in
   let strict = ref false in
-  let handle_anon_arg str =
-    match !query with
-    | Some _ ->
-        Arg.usage [] usage_msg;
-        exit 1
-    | None -> query := Some str
-  in
   let options =
     [
       ("--debug", Arg.Set debug, " print debugging information on stderr");
       ( "--strict",
         Arg.Set strict,
-        " exit with a nonzero code if there's any warning" );
+        " exit with a nonzero code if there's any warning (see \"exit codes\")"
+      );
     ]
   in
-  Arg.parse options handle_anon_arg usage_msg;
-  let query =
-    match !query with
-    | None ->
+  Arg.parse options (fun arg -> anon_args := arg :: !anon_args) usage_msg;
+  let query, scan_root =
+    match List.rev !anon_args with
+    | [ query ] -> (query, ".")
+    | [ query; scan_root ] -> (query, scan_root)
+    | _ ->
         Arg.usage [] usage_msg;
         exit 1
-    | Some query -> query
   in
-  { query; debug = !debug; strict = !strict }
+  { query; scan_root; debug = !debug; strict = !strict }
 
 (* Exit codes as documented in --help *)
 let exit_matched = 0
@@ -229,8 +226,8 @@ let main () =
     let has_finding = ref false in
     let has_warning = ref false in
     match
-      Ocamlgrep.incremental_search ~debug:conf.debug
-        (handle_event ~has_finding ~has_warning)
+      Ocamlgrep.incremental_search ~debug:conf.debug ~scan_root:conf.scan_root
+        (handle_event ~has_finding ~has_warning conf)
         conf.query
     with
     | Ok () ->

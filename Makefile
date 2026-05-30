@@ -1,15 +1,16 @@
 
 # Build the project.
-# '@check' is for producing cmt files so we can run ocamlgrep on its codebase.
 .PHONY: build
 build:
-	dune build
+	dune build app/ocamlgrep.exe
 
 .PHONY: demo
 demo:
 	dune build @check
 	dune exec -- ocamlgrep '(__ : Location.t)'
 
+# This builds the test project(s) on which we run ocamlgrep.
+# '@check' is to ensure we build all the cmt files.
 .PHONY: test
 test:
 	dune build @check
