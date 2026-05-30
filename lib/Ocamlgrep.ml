@@ -227,13 +227,13 @@ let incremental_search ?debug ?root ?scan_root (handle_event : event -> unit)
       in
       (if successes < total then
          let missing = total - successes in
-         let pct = float (successes * 100) /. float total in
          handle_event
            (Warning
               (sprintf
-                 "%d/%d cmt files found (%.1f%% coverage); %d missing - run \
-                  'dune build @check' to generate them"
-                 successes total pct missing)));
+                 "%d/%d cmt files found, %d missing. Run 'dune build @check' \
+                  to generate them (known bug: fails to build some cmts in \
+                  vendored_dirs)"
+                 successes total missing)));
       Ok ()
 
 (* High-level search entry point for use by ocaml-lsp and similar tools. *)
